@@ -1,0 +1,52 @@
+# Default experiment: seeded synthetic market, end-to-end flagship pipeline.
+# `python -m alpha.run --config configs/default.yaml` reproduces every number
+# in docs/research_note_flagship.md.
+
+seed: 20270101
+data:
+  source: synthetic            # synthetic | stooq | yfinance
+  start: "2008-01-01"
+  end: "2025-12-31"
+  n_tickers: 120
+  min_dollar_volume_30d: 1_000_000   # liquidity floor, computed PIT
+universe:
+  min_history_days: 60         # ticker must be listed >= 60 days before t
+  stable_by_construction: true # keep only tickers listed > 3y as of t
+labels:
+  horizon: 21                  # forward return horizon in trading days
+  neutralize_against: [mkt_ret_1d, log_mkt_cap]
+models:
+  baseline: elastic_net        # ridge | elastic_net
+  primary: lightgbm
+  naive_benchmark: true        # single-feature (momentum) ranking
+features:
+  families: [technical, fundamental, pead]
+validation:
+  method: anchored_walk_forward
+  n_test_blocks: 8
+  test_block_days: 63         # ~ one quarter
+  purge: 21                   # = label horizon
+  embargo: 5
+  purged_kfold:
+    k: 5
+  trials_log: true             # deflated Sharpe reads this
+portfolio:
+  long_quantile: 0.10
+  short_quantile: 0.10
+  beta_neutral: true
+  sector_neutral: true
+  max_weight: 0.05
+  turnover_penalty: 0.15
+costs:
+  commission_bps: 0.5
+  half_spread_bps: 2.0        # pessimistic default
+  impact_k: 0.1
+  max_participation: 0.25
+  borrow_annual_pct: 2.0
+  shock_multiplier: 3.0      # robustness: 3x slippage
+execution:
+  rebalance: 21              # trading days between rebalances
+output:
+  data_dir: data
+  experiment_dir: out/experiments
+  figures_dir: out/figures

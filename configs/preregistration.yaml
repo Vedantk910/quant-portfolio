@@ -1,0 +1,37 @@
+# PRE-REGISTRATION — committed BEFORE any model tuning.
+# Dated: 2026-10-25 (matches the blueprint). The pipeline's reporting layer
+# reads this file and prints PASS/FAIL against the kill criteria; a failure
+# is a first-class, reported outcome, not an embarrassment to hide.
+
+protocol_version: 1
+date: "2026-10-25"
+
+hypothesis: >
+  Short-horizon cross-sectional return dispersion is partly predictable from
+  a combination of post-earnings-announcement drift (PEAD) and simple
+  momentum/reversal features, and the predictability is stronger for names
+  with high information asymmetry (short history, low liquidity).
+
+universe: >
+  Synthetic-market universe as defined in configs/default.yaml: 120 tickers,
+  liquidity floor 1M USD trailing-30d, min 60-day listing history. Survivor
+  bias is present by construction (delisted names drop out); results are
+  reported for the eligible universe and the bias is disclosed in the memo.
+
+evaluation: >
+  Anchored walk-forward, 8 test blocks of ~63 trading days, purging equal to
+  the label horizon (21 days) and a 5-day embargo. Standardization and
+  neutralization fit on train only. Net-of-cost Sharpe uses the first-pass
+  cost model (0.5 bps commission + 2 bps half-spread + square-root impact +
+  2% annualized borrow) at 1x, plus a 3x slippage shock.
+
+kill_criteria:
+  oos_rank_ic_min: 0.02          # mean OOS rank IC below this => kill
+  oos_ic_ir_min: 0.30           # OOS IC information ratio below this => kill
+  net_sharpe_min: 0.50          # OOS net Sharpe (3x shock) below this => kill
+
+reporting: >
+  The research note leads with the sentence form: "Out-of-sample rank IC
+  {ic} (IC IR {ir}) over {period}, net of {cost_bps}bp round-trip costs,
+  with the edge {concentration}." If any kill criterion trips, the note
+  states the negative result and why, and moves on.

@@ -1,0 +1,620 @@
+===== PAGE 1 =====
+RESEARCH & STRATEGY DOCUMENT
+ A Hedge-Fund-Grade
+ Quant Portfolio
+ A 26-30 Week Design for the 2027 Recruiting Cycle
+ 
+ Primary Track: Cross-Sectional Equity Alpha
+ Audience: Hedge Fund Quant Researcher
+ Data Constraint: Free / Public Sources Only
+ Prepared 25 October 2026
+"Here is an economic hypothesis, here is the hardest honest test of it,
+ here is what it is worth after costs, and here is what would make me
+ abandon it."
+
+===== PAGE 2 =====
+A Hedge-Fund-Grade Quant Portfolio: Design for 2027 Recruiting
+Cross-Sectional Equity Alpha
+Quant Portfolio Blueprint  |  2027 Recruiting Cycle  |  Free-Data Design
+2
+Contents
+01   The Thesis
+02   What the Evidence Says Actually Matters
+03   The Project Map
+04   P0: Research Infrastructure & Backtest Engine
+05   P1: Flagship - ML Cross-Sectional Equity Alpha
+06   P2: Alternative Data from SEC Filings
+07   P3: Transaction Cost, Impact & Capacity
+08   P4: Portfolio Construction & Risk
+09   P5: Literature Replication & Extension
+10   The Data Plan (Free-Only, with Traps Named)
+11   The Validation Standard
+12   Repo Structure and Tooling
+13   Presentation & Interview Prep
+14   Calendar
+15   Failure Modes That Cost People Offers
+16   The Metrics That Matter
+17   The Next Fourteen Days
+18   Sources & Further Reading
+A   Appendix - One-Page Summary
+01   The Thesis
+Most candidates apply to quant roles with three or four disconnected notebooks: a CNN on
+stock images, a "predict the next close" LSTM, a sentiment scrape, and a Sharpe ratio
+computed on in-sample data. A hiring quant reads all four in under ten minutes and concludes
+the candidate does not know the research cycle.
+The candidate who gets hired has one thing the others do not: a single, end-to-end research
+pipeline that runs from raw data to a net-of-cost, capacity-constrained, purged-validated
+backtest, with a written economic hypothesis, a documented attempt to falsify it, and a
+research note that reads like an internal memo. The portfolio is not a list of projects. It is a
+body of work with a spine.
+The single most important question the portfolio must answer in every project is not "is this
+model accurate?" but "is this edge real, and would it survive being traded?"
+02   What the Evidence Says Actually Matters
+Research on what distinguishes strong quant portfolios from weak ones converges on a
+consistent set of criteria. It is worth internalizing because it drives every choice in this
+document:
+ Signal of Quality
+Signal of Weakness
+Point-in-time data, documented as-of joins
+Data joined with .merge() on period-end dates
+
+===== PAGE 3 =====
+A Hedge-Fund-Grade Quant Portfolio: Design for 2027 Recruiting
+Cross-Sectional Equity Alpha
+Quant Portfolio Blueprint  |  2027 Recruiting Cycle  |  Free-Data Design
+3
+Signal of Quality
+Signal of Weakness
+Purged / walk-forward validation with embargo
+Random train_test_split on overlapping labels
+Transaction costs, slippage, turnover, capacity
+"Sharpe 4.2" with no costs mentioned
+Benchmark against a published baseline factor
+"Our model beats the market"
+Factor and sector exposure decomposition
+No exposure analysis at all
+Explicit write-up of what would fail live
+Silent on limitations
+Reproducible pipeline, pinned dependencies, tests
+Manual notebook steps and a results folder
+Neutral on whether the signal works
+Enthusiastic about a signal that did not survive
+Key reference resources: mlfinlab (triple-barrier labeling, purged CV, fractional
+differentiation) - Microsoft Qlib (end-to-end AI quant platform) - QuantConnect LEAN
+(event-driven backtesting) - FinRL (RL for trading) - Adv_Fin_ML (leakage-resistant validation).
+The highest-impact single project for a fund screen is a market-neutral equity-ranking strategy
+with alternative data, purged validation, transaction costs, and portfolio attribution - not a
+standalone return-prediction model. That is exactly the flagship designed in Section 05.
+03   The Project Map
+Six projects, one pipeline. Each supporting project plugs into the spine:
+ #
+Project
+Primary Signal
+Wks
+P0
+Research Infrastructure & Backtest Engine
+Engineering discipline, cost realism
+2
+P1
+Flagship: ML Cross-Sectional Equity Alpha
+Full research cycle, signal science, rigor
+8-10
+P2
+Alternative Data from SEC Filings (NLP)
+Data originality, PIT discipline
+6
+P3
+Transaction Cost, Impact & Capacity
+Gross alpha is not net alpha
+4
+P4
+Portfolio Construction & Risk Attribution
+Forecasts to implementable positions
+4
+P5
+Literature Replication & Extension
+Research judgment; build from a paper
+2
+Why this order: P0 exists so P1 can be finished in eight weeks rather than sixteen. Building the
+universe, as-of data store, cost model, and purged validator first is not busywork - it is the
+difference between a portfolio that is interview-ready in December and one still debugging
+joins in March.
+04   P0: Research Infrastructure & Backtest Engine
+(Weeks 1-2)
+Every subsequent project inherits this. If it is built properly, each later project is "write the
+alpha, plug it in". If it is skipped, every later project re-invents a leaky backtest, and the
+portfolio becomes unconvincing exactly where it needs to be strongest.
+  Point-in-time data store: as-of-joined Parquet files, each row carrying an available_at
+timestamp, with a manifest and integrity checks.
+ Universe with PIT membership: a symbol is in the universe on date t if it was listed, not
+delisted, and met liquidity/size criteria as of t.
+
+===== PAGE 4 =====
+A Hedge-Fund-Grade Quant Portfolio: Design for 2027 Recruiting
+Cross-Sectional Equity Alpha
+Quant Portfolio Blueprint  |  2027 Recruiting Cycle  |  Free-Data Design
+4
+ Corporate actions: split- and dividend-adjusted prices; explicit total-return vs price-return
+separation.
+ Backtest engine: vectorized daily - portfolio construction - weights - costs - returns.
+ Cost model (first pass): commission + half-spread + provisional impact; P3 replaces with
+calibrated model.
+ Validation library: purged K-fold with embargo, and anchored/rolling walk-forward splits.
+ Experiment logging: every backtest writes a JSON record (config hash, data vintage, metrics,
+seed).
+Definition of done
+A trivial "buy the universe" strategy returns something within 20bp of the equal-weight
+universe return net of estimated costs, with a unit test pinning the result. A deliberately leaky
+strategy is caught by the validator - this test proves the guardrail works.
+Deliverable: src/alpha/ package + README + docs/data_dictionary.md + 5-8 pytest tests.
+05   P1: Flagship - ML Cross-Sectional Equity Alpha
+(Weeks 3-10)
+This is the project that decides the outcome. It is the spine of the portfolio.
+Economic hypothesis (state it, then test it)
+ "Short-horizon cross-sectional return dispersion is partly predictable from a combination of
+post-earnings-announcement drift (PEAD) and analyst-revision-style signals embedded in filing
+text, and this predictability is stronger in stocks with high information asymmetry." A
+hypothesis like "machine learning predicts stock prices" is not a hypothesis; it is a topic.
+Data (all free, all point-in-time)
+ Source
+Use
+Key Constraint
+Stooq / yfinance
+Daily split/dividend-adjusted prices &
+volume
+Not survivorship-safe - fix in Section
+10
+SEC XBRL companyfacts API
+Fundamentals with exact filed dates
+Usable on filing date, never
+period-end
+FINRA consolidated short
+interest
+Short interest signal
+Bi-monthly, exchange-level, slow
+FRED
+Macro regime conditioning (VIX, yields,
+credit spreads)
+Use ALFRED vintage data if going
+deep
+Ken French Data Library
+Factor baselines (momentum, size, value)
+Honest benchmark - never a feature
+without disclosure
+Method
+1. Build a panel of monthly (or 5-day) rebalance dates with a point-in-time universe.
+2. Labels: forward excess return over 1-3 months, plus triple-barrier labels for the event-driven
+subset.
+3. Features: technical (momentum at multiple horizons, reversal, volatility, liquidity, turnover),
+fundamental (accruals, profitability, asset growth, leverage, quality), and filing-derived.
+4. Models: ridge/elastic-net baseline first, then gradient boosting (LightGBM); plus a deliberately
+simple third benchmark so the note can honestly say how much the complex model adds.
+5. Neutralization: regress the signal on market beta, size, and industry exposure; optimize the
+portfolio to be market-, beta-, and sector-neutral directly.
+
+===== PAGE 5 =====
+A Hedge-Fund-Grade Quant Portfolio: Design for 2027 Recruiting
+Cross-Sectional Equity Alpha
+Quant Portfolio Blueprint  |  2027 Recruiting Cycle  |  Free-Data Design
+5
+6. Turn forecasts into a ranking - long top decile, short bottom decile, beta/sector neutral, with
+liquidity caps - rather than reporting raw predicted returns.
+7. Report cross-sectional rank IC by date, IC mean, IC IR, and decile monotonicity.
+Validation - the part that makes or breaks it
+    Purged K-fold with embargo and anchored walk-forward OOS splits. No random shuffles in
+the time dimension.
+   Strictly OOS feature standardization, target construction, and feature selection (fit on train
+folds only).
+   Benchmark against equal-weight universe, market beta, and a momentum factor
+implemented from scratch.
+   Bootstrap the IC series for a CI; use a deflated Sharpe ratio correcting for multiple testing.
+If you tried 200 configurations and picked the best, the honest statistic is the deflated one - say
+so out loud.
+   Regime analysis: up/down/high-vol/low-vol subperiods; examine the worst month and ask
+what happened.
+   Capacity and cost: net returns after realistic costs; turnover and cost share; capacity curve.
+Kill criteria (write down before running)
+ Pre-register: "If the OOS IC mean is below 0.02, IC IR below 0.3 after neutralization, or
+net-of-cost Sharpe below 0.5, the signal is not real and I will document that and move on." A
+portfolio that contains a pre-registered falsification and a negative result is more impressive
+than one where everything works.
+The headline result
+Not the Sharpe ratio. A sentence like: "Out-of-sample rank IC of 0.031 (IC IR 0.45) across
+2010-2026, net of 34bp round-trip costs, with the edge concentrated in the
+post-earnings-announcement sub-sample and absent in the 2018 and 2022 drawdowns." That
+sentence is what an interviewer repeats to their colleagues.
+06   P2: Alternative Data from SEC Filings (Weeks 11-16)
+Alternative data is where free-market edges hide, because most quants with budget buy the
+same commercial feeds. The SEC publishes everything, with timestamps, for free.
+Directions (pick two, do not attempt all)
+ Filing-tone / MD&A sentiment: language-model-based sentiment (FinBERT or a modern LLM)
+on 10-K/10-Q MD&A sections, with a controlled, labeled evaluation set rather than eyeballed
+samples.
+ Risk-factor drift: measure how the set and language of risk factors changes between
+consecutive 10-Ks. Rising specificity is a genuine, timestamped, underused signal.
+ Earnings surprise from XBRL: surprise defined against a naive seasonal random walk rather
+than a consensus estimate - free consensus data is the binding constraint.
+ Filing-event study: 8-K event windows with abnormal-return measurement, doubling as a
+validation harness for P1.
+The rigor that matters here
+    Point-in-time everything. Only use a document as of its actual filing/acceptance timestamp.
+Indexing a document a model "should" have had earlier is the classic alt-data leak, and an
+interviewer who does alt data will look for exactly this.
+   Evaluation: a hand-labeled or rule-derived benchmark set, precision/recall/F1, and
+comparison against baselines (naive, random, TF-IDF + logistic regression). A transformer that
+does not beat TF-IDF on a small set is a result worth reporting - it shows you know the
+
+===== PAGE 6 =====
+A Hedge-Fund-Grade Quant Portfolio: Design for 2027 Recruiting
+Cross-Sectional Equity Alpha
+Quant Portfolio Blueprint  |  2027 Recruiting Cycle  |  Free-Data Design
+6
+power/sample-size tradeoff.
+   Adversarial checks: does the model just detect "worse" English? Does it key on document
+length, boilerplate, or the 10-K vs 10-Q label? Control for these.
+07   P3: Transaction Cost, Market Impact & Capacity
+(Weeks 17-20)
+At a fund, a researcher whose job is to make sure the backtest survives contact with the
+market is a real role. This is the single most common place amateur portfolios collapse under
+questioning.
+  Spread and fee model: commissions, exchange fees, half-spread crossing costs, market/limit
+mix, borrow cost and locate for shorts - the short-side fee schedule is often overlooked and can
+dominate.
+ Market impact: implement the square-root law, impact ~ k * sigma * sqrt(Q / ADV), calibrate
+k from your own volume data; compare against a linear-impact and constant-bps assumption.
+ Turnover analysis: decomposition by rebalance frequency; show the net-alpha knee where
+rebalancing stops paying.
+ Capacity curve: performance as a function of capital, with ADV-based and participation-rate
+caps. As capacity grows, impact grows, so alpha decays - plot the break-even AUM.
+ De-risking simulation: shock the cost assumptions (2x, 3x slippage) and show which findings
+survive. A strategy that only works at optimistic costs is not a strategy.
+Deliverable: src/alpha/costs/ with the calibrated model, a figure set (equity curves gross vs
+net, capacity curve, cost-sensitivity tornado), and a re-run of the P1 flagship with the
+calibrated costs.
+08   P4: Portfolio Construction & Risk (Weeks 21-24)
+Turn a forecast into a portfolio someone could actually run, and prove you understand what
+the portfolio's exposures actually are.
+  Covariance estimation: sample covariance is unusable; use Ledoit-Wolf shrinkage and show the
+eigenvalue instability of the sample matrix with a concrete blow-up illustration.
+ Optimizers: mean-variance with shrinkage, minimum variance, risk parity, and a cost-aware
+variant that penalizes turnover. Compare on net, not gross, performance.
+ Risk measures: volatility, expected shortfall (CVaR), drawdown, and tracking error vs the
+benchmark.
+ Attribution: decompose realized P&L into signal, market/sector beta, style factors (size, value,
+momentum, quality), and residual - the section where you show the "alpha" is not just a levered
+momentum bet in disguise. Include the regression exposure table and contribution-by-factor
+table.
+ Stress testing: historical scenario replay (2008, 2020, 2022), a hypothetical scenario (rates
++200bp, spreads widen, correlation -> 1), and a sensitivity grid.
+ Risk-adjusted selection: if the portfolio can only keep one model, choose on OOS net Sharpe
+and capacity, not on the in-sample best.
+09   P5: Literature Replication & Extension (Weeks
+25-26, then monthly)
+Demonstrate research judgment: the ability to take a published result, reproduce it, and locate
+its boundary conditions. Doing it in public (in your repo) is unusually persuasive.
+
+===== PAGE 7 =====
+A Hedge-Fund-Grade Quant Portfolio: Design for 2027 Recruiting
+Cross-Sectional Equity Alpha
+Quant Portfolio Blueprint  |  2027 Recruiting Cycle  |  Free-Data Design
+7
+Paper
+Replication Target
+Daniel & Moskowitz - Momentum
+crash
+Momentum's asymmetric drawdown; characterize when it happens. It is
+the baseline P1 must beat.
+George & Hwang - Short-term
+reversal
+52-week-high proximity effect, with a microstructure-cost lens (P3 decides)
+Falkenstein - Value spread
+Value's dependence on a spread measure, not level
+Factor timing, value-weighted vs
+equal-weighted
+Which weighting survives realistic costs
+Standard: reproduce the published result, then extend it - does it survive triple-barrier labels,
+purged validation, and realistic costs? Does it survive in a universe built without survivorship
+bias? Every replication ends with a "so what for my flagship" paragraph.
+10   The Data Plan (Free-Only, with Traps Named)
+Source
+Use
+PIT?
+Notes
+SEC XBRL
+companyfacts
+Fundamentals
+Yes - filed date
+Best free PIT source; ~10+ yrs; tag taxonomy
+is messy - build a mapping layer and test it
+SEC EDGAR full text
++ 8-K
+Filings, events
+Yes - acceptance
+timestamp
+P2's raw material; respect rate limits and the
+User-Agent policy
+Stooq / yfinance
+Prices, volume
+Prices yes;
+universe no
+The ticker list is not survivorship-safe - see
+below
+FINRA short interest
+Short interest
+Bi-monthly,
+lagged
+Free but slow; do not treat as daily
+FRED / ALFRED
+Macro, VIX, regime
+conditioning
+Revisions matter
+ALFRED vintage data avoids revised-value
+hindsight
+Ken French library
+Factor benchmarks
+Published,
+backfilled
+Use as the benchmark, never as a feature
+without disclosure
+The survivorship-bias trap - the most important data issue
+ A free daily price source gives you the currently listed universe. Backtesting 15 years of "the
+market" from that list means every delisted company - Enron, Lehman, MCI, Wirecard, and
+thousands of small caps - is silently removed from history, which manufactures enormous
+apparent returns. No quant reviewer will miss this if you present the equity curve.
+Mitigations, in descending order of strength: (1) build the universe from a point-in-time
+constituent file that includes delisted names (Ken French 3-factor universe, a delisting-return
+database, or a hand-curated list of known delistings for your size tier - partial but honest); (2)
+use a universe definition that is stable by construction, e.g. only names that have survived 3
+years as of the date - a legitimate, point-in-time construct, documented as a survivorship-aware
+approximation; (3) at minimum, explicitly disclose the bias, quantify it, and report results both
+with and without the affected names. Write a paragraph titled "Survivorship bias" in the note.
+Other traps: A 10-K for fiscal year 2023 filed in February 2024 cannot be used to make a
+decision in January 2024 - use the filed date, always. S&P 500 and Russell membership files
+are not freely available point-in-time - use an explicit universe rule instead of faking them.
+
+===== PAGE 8 =====
+A Hedge-Fund-Grade Quant Portfolio: Design for 2027 Recruiting
+Cross-Sectional Equity Alpha
+Quant Portfolio Blueprint  |  2027 Recruiting Cycle  |  Free-Data Design
+8
+Where paid data would genuinely upgrade the work (flag in the note): a survivorship-safe US
+equity database with delisted names (CRSP, Refinitiv, Sharadar, Norgate); analyst estimates
+and revisions; intraday tick data for realistic spread/impact; higher-frequency short interest;
+options data for vol-selling or dispersion work.
+11   The Validation Standard (Apply to Every Project)
+    No feature uses information unavailable at decision time - verified by an automated as-of
+assertion on a sample of rows.
+   Universe membership is point-in-time, including delisted names, or the bias is disclosed and
+quantified.
+   Corporate actions handled; no raw-split price contamination.
+   Purged K-fold with embargo; overlapping labels handled. Walk-forward OOS testing is the
+headline result.
+   All transformations (standardization, winsorization, neutralization, feature selection) fit on
+train only.
+   Multiple-comparison correction (deflated Sharpe or a documented FWER procedure)
+reported alongside raw metrics.
+   Random seeds fixed and recorded; results reproducible from a single command.
+   Commissions, spread, impact, borrow, and financing costs modeled; turnover and capacity
+reported.
+   Regime and subperiod analysis, including the worst month; cost-sensitivity: does the result
+survive 2x slippage?
+   Benchmark table, exposure table (beta, sector, style loadings), and a failure analysis - what
+did not work and what would falsify the result.
+12   Repo Structure and Tooling
+quant-portfolio/
+README.md # who you are, the thesis, headline results, how to run
+docs/
+research_note_flagship.md # the memo - this is what gets read
+data_dictionary.md
+limitations.md
+src/alpha/
+data/ # loaders, PIT store, universe, corporate actions, caches
+features/ # feature definitions, one file per family
+labels/ # forward returns, triple barrier
+models/ # ridge, boosting, baselines - comparable interface
+validation/ # purged k-fold, embargo, walk-forward
+portfolio/ # ranking, weights, optimizer, risk
+costs/ # spread, impact, borrow, capacity
+backtest/ # engine
+reporting/ # metrics, plots, attribution
+notebooks/ # exploration only - nothing load-bearing
+tests/ # pytest: point-in-time, no-leakage, cost, metric correctness
+configs/ # YAML per experiment; every result traceable to a config
+scripts/ # run_all.sh, make_report.sh
+Tooling (keep it boring and standard): Python 3.11+; uv or poetry for a locked environment;
+pandas/numpy/polars; scikit-learn plus lightgbm; pytest; ruff + mypy; GitHub Actions running
+tests on every push. Pin everything. Commit data manifests, not raw data. A uv sync && pytest
+one-liner beats a heavyweight image.
+
+===== PAGE 9 =====
+A Hedge-Fund-Grade Quant Portfolio: Design for 2027 Recruiting
+Cross-Sectional Equity Alpha
+Quant Portfolio Blueprint  |  2027 Recruiting Cycle  |  Free-Data Design
+9
+Keep notebooks for exploration and figures; put every load-bearing piece of logic in src/ with
+tests. If a piece of logic exists only in a notebook, it does not exist.
+Reproducibility target: one command reproduces every number in the research note from raw
+public data. State this at the top of the README and make it true.
+13   Presentation & Interview Prep
+A hiring manager spends about ten minutes on the README and thirty on the research note.
+Design for that. README, top to bottom:
+ 1. One paragraph: who you are, what you build, and the headline result in a number.
+2. The results table (OOS IC, net Sharpe, turnover, capacity) with a link to the note.
+3. The research note as a PDF or rendered page, and the reproduction command.
+4. The project list with one line each.
+5. "How to evaluate this work" - the specific questions a reviewer should probe, and where to
+look for each. Inviting scrutiny is a strong move.
+Do not include
+ Jupyter notebooks with 40 cells and no narrative.
+ Backtests that omit costs; model comparison tables without OOS splits.
+ A README that opens with "This project explores the application of machine learning to stock
+price prediction." A hiring quant reading that learns you were looking for a tutorial, not a
+question.
+Interview prep runs alongside from Week 3
+Quant interviews test four things: probability and statistics, stochastic processes, mental math
+under time pressure, and programming. Allocate roughly 20% of time to the technical track.
+Keep a running log of every question you get wrong and re-solve it a week later - this
+compounds faster than any book. Practice implementing formulas correctly under time
+pressure; market-making and pair-trading questions are where candidates fail.
+14   Calendar (26-30 Weeks)
+Window
+Focus
+Output
+Weeks 1-2
+P0 infrastructure
+Backtest engine, PIT store, purged validator, tests
+Weeks 3-10
+P1 flagship
+Full pipeline, results, research note v1
+Weeks 6-8
+Interview technical prep begins
+Probability/stats, stochastic processes, mental math
+Weeks 11-16
+P2 alt data (NLP)
+Pipeline, labeled benchmark, evaluation
+Weeks 17-20
+P3 costs, impact, capacity
+Calibrated cost model, capacity curves
+Weeks 21-24
+P4 portfolio & risk
+Optimizer comparison, attribution, stress tests
+Weeks 25-26
+P5 replications
+Two papers reproduced and extended
+Weeks 27+
+Polish, applications
+Public post, deck, talk track, mock interviews
+Campus recruiting for the 2027 class opens in the fall and interviews cluster in the same
+window. The plan is front-loaded so a complete, defensible flagship exists before the first
+interview cycle. Do not defer the flagship for a first-round interview that may be two months
+
+===== PAGE 10 =====
+A Hedge-Fund-Grade Quant Portfolio: Design for 2027 Recruiting
+Cross-Sectional Equity Alpha
+Quant Portfolio Blueprint  |  2027 Recruiting Cycle  |  Free-Data Design
+10
+away.
+15   Failure Modes That Cost People Offers
+Failure
+Why It Matters
+Random train/test splits on time series
+The most common disqualifying error; looks careless to anyone who has
+done it before
+Reporting in-sample Sharpe
+Any number seen during model selection is not a result; label every
+metric in-sample or OOS
+Hidden survivorship bias
+Invalidates the headline result; turns a strong candidate into a rejected
+one
+Unrealistic costs
+A strategy that only works at 1bp of slippage does not work; default to
+pessimistic
+"Predicting stock prices" framing
+Reframe as cross-sectional ranking and relative value - what the role
+actually does
+No benchmark
+Beating the market is not a finding; beating a documented factor
+baseline is
+No falsification
+If nothing can be wrong, a reviewer will assume you did not look; publish
+the kill criteria
+Too many shallow projects
+Four half-projects read as a tutorial collection; one deep one reads as a
+research program
+Ignoring the write-up
+A strong result communicated badly loses to a moderate result
+communicated well
+16   The Metrics That Matter
+Metric
+Why a Quant Cares
+Out-of-sample rank IC and IC IR
+Direct measure of predictive ordering, per-period and stable
+Net-of-cost Sharpe / IR
+The only Sharpe that means anything; gross is a fiction
+Turnover and cost drag
+How much of gross alpha is being spent to get it
+Capacity (break-even AUM)
+Whether the edge is tradeable at any relevant size
+Factor/sector exposure
+Whether the alpha is disguised beta or a known factor
+Worst month and drawdown
+The tail behaviour that determines whether you survive it
+Deflated Sharpe
+Corrects for the number of things you tried
+Resist the urge to lead with anything else. The composite the hiring manager is actually
+scoring: net, out-of-sample, after costs, per unit of capacity.
+17   The Next Fourteen Days
+ 1. Set up the repo with uv, src/ layout, pytest, ruff, pre-commit, and a Makefile with make test
+and make report.
+2. Build the point-in-time data store for prices and the universe, with the available_at column
+and a manifest. Start here - it is the piece that is painful to retrofit.
+3. Implement and test the validator: purged K-fold with embargo, walk-forward splits, and a
+deliberately leaky feature the validator must reject.
+
+===== PAGE 11 =====
+A Hedge-Fund-Grade Quant Portfolio: Design for 2027 Recruiting
+Cross-Sectional Equity Alpha
+Quant Portfolio Blueprint  |  2027 Recruiting Cycle  |  Free-Data Design
+11
+4. Implement the triple-barrier and forward-return labelers, with unit tests on hand-computed
+small cases.
+5. Get the SEC XBRL companyfacts loader working for ten tickers, with caching and a filed-date
+availability rule.
+6. Build the universe and quantify the survivorship issue: how much does the backtest change if
+you add back a set of known delisted names? Write down the number - it becomes a line in the
+note.
+7. Implement the cost model (commission + half-spread + borrow) and portfolio construction
+(rank -> weights, beta/sector neutral).
+8. Run the first end-to-end test: a simple momentum baseline, purged walk-forward, net of costs.
+You now have a complete pipeline, even if the alpha is uninteresting.
+9. Write the pre-registration document: hypothesis, kill criteria, and the exact evaluation
+protocol, dated and committed before you tune anything.
+10. Read two papers properly: Lopez de Prado on financial ML and one empirical momentum
+paper.
+18   Sources & Further Reading
+– **mlfinlab** (hudson-and-thames/mlfinlab) - triple-barrier labeling, purged K-fold, fractional
+differentiation. The reference for the Section 11 validation standard.
+– **Microsoft Qlib** - end-to-end AI-oriented quant investment platform; useful reference architecture.
+– **QuantConnect LEAN** - production-grade event-driven backtesting; study its assumptions about fills,
+fees, and slippage.
+– **FinRL** - reinforcement learning for trading; relevant for modern methods, classical baselines remain
+mandatory.
+– **Adv_Fin_ML** - implementations on advances in financial machine learning, emphasis on
+leakage-resistant validation.
+– **Ken French Data Library** (Dartmouth) - factor benchmarks and point-in-time-style universe files; the
+honest benchmark for any signal you build.
+– **SEC XBRL / EDGAR API** - point-in-time fundamentals with filing timestamps.
+– **FINRA short interest data** - free bi-monthly short interest.
+– **FRED / ALFRED** (St. Louis Fed) - macro series, with vintage data for revision-safe research.
+A   Appendix - One-Page Summary
+Dimension
+Decision
+Track
+Cross-sectional equity alpha, market-neutral, rank-based
+Flagship
+ML cross-sectional model with purged walk-forward validation, net of costs
+Data
+SEC XBRL (PIT fundamentals), EDGAR (text/events), Stooq/yfinance (prices), FINRA (short
+interest), FRED (macro), Ken French (benchmarks)
+Validation
+Purged K-fold + embargo, anchored walk-forward, OOS-only transformations, deflated
+Sharpe, regime and stress analysis
+Realism
+Commission + spread + square-root impact + borrow, turnover, capacity curve, cost
+sensitivity
+Supporting
+P2 NLP alt data, P3 cost/impact/capacity, P4 portfolio construction & attribution, P5
+literature replication
+Artifacts
+Public repo, research memo, reproducibility command, public write-up, 2-minute talk
+track
+Timeline
+26-30 weeks, front-loaded so the flagship is complete before the first interview cycle
+
+===== PAGE 12 =====
+A Hedge-Fund-Grade Quant Portfolio: Design for 2027 Recruiting
+Cross-Sectional Equity Alpha
+Quant Portfolio Blueprint  |  2027 Recruiting Cycle  |  Free-Data Design
+12
+Core message: "Here is an economic hypothesis, here is the hardest honest test of it, here is
+what it is worth after costs, and here is what would make me abandon it."

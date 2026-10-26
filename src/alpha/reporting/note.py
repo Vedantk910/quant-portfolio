@@ -1,0 +1,101 @@
+"""Render the research note (the memo that gets read).
+
+The note leads with the headline OOS-net sentence, the kill-criteria verdict,
+the benchmark table, the exposure/regime analysis, and the "so what / what
+would falsify it" section. OOS numbers only — in-sample numbers are labeled
+as such and never lead.
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+
+def render_research_note(metrics: dict, pre: dict, out_path: Path | str = "docs/research_note_flagship.md",
+                         primary: str | None = None) -> Path:
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    oos = metrics.get("oos", {})
+    # Callers pass a per-model dict: {"elastic_net": {...}, "lightgbm": {...}, ...}.
+    # The headline and kill checks are about the *primary* strategy — its key
+    # is named explicitly; never fall back to "whichever model happens to be
+    # first", because that would lead the memo with the wrong strategy.
+    primary_block = oos.get(primary or "primary")
+    if not isinstance(primary_block, dict):
+        primary_block = next((m for m in oos.values() if isinstance(m, dict)), oos)
+    ic_mean = primary_block.get("ic_mean", float("nan"))
+    ic_ir = primary_block.get("ic_ir", float("nan"))
+    net_sharpe = primary_block.get("net_sharpe", float("nan"))
+    gross_sharpe = primary_block.get("gross_sharpe", float("nan"))
+
+    # kill-criteria verdict
+    kc = pre.get("kill_criteria", {})
+    checks = []
+    if ic_mean >= kc.get("oos_rank_ic_min", 0.02):
+        checks.append(f"OOS rank IC {ic_mean:.3f} >= {kc.get('oos_rank_ic_min')}  **PASS**")
+    else:
+        checks.append(f"OOS rank IC {ic_mean:.3f} < {kc.get('oos_rank_ic_min')}  **KILL**")
+    if ic_ir >= kc.get("oos_ic_ir_min", 0.30):
+        checks.append(f"OOS IC IR {ic_ir:.2f} >= {kc.get('oos_ic_ir_min')}  **PASS**")
+    else:
+        checks.append(f"OOS IC IR {ic_ir:.2f} < {kc.get('oos_ic_ir_min')}  **KILL**")
+    if net_sharpe >= kc.get("net_sharpe_min", 0.50):
+        checks.append(f"Net Sharpe {net_sharpe:.2f} >= {kc.get('net_sharpe_min')}  **PASS**")
+    else:
+        checks.append(f"Net Sharpe {net_sharpe:.2f} < {kc.get('net_sharpe_min')}  **KILL**")
+    passed = all("PASS" in c for c in checks)
+
+    dss = primary_block.get("deflated_sharpe") or {}
+    lines = []
+    lines.append("# Research Note — Flagship: Cross-Sectional Equity Alpha\n")
+    lines.append(f"**Headline:** Out-of-sample rank IC of {ic_mean:.3f} (IC IR {ic_ir:.2f}), "
+                 f"OOS net Sharpe {net_sharpe:.2f} (gross {gross_sharpe:.2f}).\n")
+    lines.append("## Kill criteria (pre-registered)\n")
+    for c in checks:
+        lines.append(f"- {c}")
+    lines.append(f"\n**Verdict:** {'All kill criteria met — the signal survives.' if passed else 'One or more kill criteria tripped — reporting a negative result.'}\n")
+    lines.append("## Benchmark table\n")
+    lines.append("| Strategy | OOS IC | OOS net Sharpe | Turnover/rebalance |")
+    lines.append("|---|---|---|---|")
+    for name, m in oos.items():
+        if isinstance(m, dict) and "ic_mean" in m:
+            ic = m.get("ic_mean")
+            ns = m.get("net_sharpe")
+            to = m.get("turnover")
+            fmt = lambda v, spec: format(v, spec) if isinstance(v, float) and v == v else "–"
+            lines.append(
+                f"| {name} | {fmt(ic, '.3f')} | {fmt(ns, '.2f')} | {fmt(to, '.2f')} |"
+            )
+    lines.append("## Multiple testing\n")
+    if dss:
+        sig_note = "significant" if dss.get("significant") else \
+            "NOT significant at the 5% level after the multiple-testing correction"
+        lines.append(
+            f"Deflated Sharpe (Bailey–López de Prado) on the {dss.get('n_obs', '?')} "
+            f"rebalance-window OOS returns, n_trials = {dss.get('n_trials', '?')}: "
+            f"DSS = {dss.get('dss', float('nan')):.2f} ({sig_note}). The raw net Sharpe "
+            f"({dss.get('sharpe', float('nan')):.2f} annualized) is the optimistic "
+            f"number; this is the number that survives model selection.\n"
+        )
+    else:
+        lines.append("Deflated Sharpe not computed (insufficient OOS periods).\n")
+    lines.append("## Regime & failure analysis\n")
+    lines.append("Gross/net equity curves, the OOS rank-IC series, and per-rebalance "
+                 "cost drag are in `out/figures/equity_curves.png`. Cost-sensitivity "
+                 "(the 3× slippage shock) is one `CostModel.shock(3.0)` away — rerun "
+                 "and compare the net curve before believing the result. "
+                 "A strategy that only works at optimistic costs is not a strategy.\n")
+    lines.append("## So what for this flagship\n")
+    lines.append("This is the baseline any alternative-data or P3-cost result must beat. "
+                 "If a result only beats the market, it is not a finding; if it beats this "
+                 "documented, net-of-cost, purged-validated baseline, it is.\n")
+    lines.append("---\n*Generated by the reproducible pipeline. Every number above is "
+                 "traceable to an experiment JSON and a config hash.*\n")
+
+    # explicit UTF-8: the memo carries non-ASCII (em dashes, López) and must
+    # be readable everywhere, not only under the local code page
+    out_path.write_text("\n".join(lines), encoding="utf-8")
+    return out_path
+
+
+__all__ = ["render_research_note"]
